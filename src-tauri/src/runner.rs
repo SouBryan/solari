@@ -384,7 +384,28 @@ pub async fn run_billing_task(
                                 if let TaskMode::ExecuteStep { step_id, .. } = mode {
                                     let code = val.get("code").and_then(|v| v.as_i64()).unwrap_or(-1) as i32;
                                     let msg = val.get("msg").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                    emit_event(app, SolariEvent::Launched { step_id, code, msg });
+                                    emit_event(app, SolariEvent::Launched { step_id, code, msg: msg.clone() });
+
+                                    if code == 0 {
+                                        let instruction = "Checkout aberto no emulador! Confira se hoje está R$ 0,00, conclua a assinatura na Play Store e clique no próximo passo.".to_string();
+                                        emit_log(app, "ok", &instruction);
+                                        emit_event(
+                                            app,
+                                            SolariEvent::StepDone {
+                                                step_id,
+                                                success: true,
+                                                message: instruction,
+                                            },
+                                        );
+                                        completed = true;
+                                        break;
+                                    } else {
+                                        fatal_error = Some(format!(
+                                            "Falha ao abrir checkout da Google Play (código {}): {}",
+                                            code, msg
+                                        ));
+                                        break;
+                                    }
                                 }
                             }
                             "purchase_cb" => {

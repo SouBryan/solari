@@ -57,7 +57,7 @@ export function Step3Accumulation({
             <CardTitle>Assistente de Acumulação (Passos 1 a 4)</CardTitle>
           </div>
           <CardDescription>
-            Execute os passos em ordem sequencial. Cada etapa avança automaticamente após confirmação na Play Store.
+            Execute os passos em ordem sequencial. Ao abrir o checkout no emulador, confira R$ 0,00, conclua na Play Store e avance para o próximo passo.
           </CardDescription>
         </div>
 
