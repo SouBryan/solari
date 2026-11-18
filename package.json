@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "postinstall": "node -e \"if(process.platform==='win32'){const fs=require('fs'),p=require('path');const src=p.join('node_modules','@rollup','wasm-node','dist'),dst=p.join('node_modules','rollup','dist');if(fs.existsSync(src)&&fs.existsSync(dst))fs.cpSync(src,dst,{recursive:true,force:true});}\""
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.3",
@@ -27,6 +28,7 @@
     "tailwind-merge": "^3.0.2"
   },
   "devDependencies": {
+    "@rollup/wasm-node": "^4.68.7",
     "@tauri-apps/cli": "^2.2.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
@@ -37,5 +39,8 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "~5.7.2",
     "vite": "^6.1.0"
+  },
+  "overrides": {
+    "rollup": "npm:@rollup/wasm-node@^4.34.0"
   }
 }
