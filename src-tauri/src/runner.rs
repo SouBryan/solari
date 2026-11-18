@@ -267,7 +267,7 @@ pub async fn run_billing_task(
             false,
             old_token.as_str(),
             if step_id.requires_token() { Some(5) } else { None },
-            600u64,
+            45u64,
         ),
     };
 

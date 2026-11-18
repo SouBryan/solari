@@ -83,8 +83,13 @@ function boot() {
         implements: [SLL],
         methods: {
           onBillingSetupFinished: function (r) {
-            S({ ev: "setup", code: r.getResponseCode() });
-            if (r.getResponseCode() === 0) query();
+            var c = r.getResponseCode();
+            S({ ev: "setup", code: c });
+            if (c === 0) {
+              query();
+            } else {
+              S({ ev: "boot_err", m: "BillingClient setup retornou código " + c });
+            }
           },
           onBillingServiceDisconnected: function () { S({ ev: "disc" }); }
         }
@@ -110,7 +115,11 @@ function query() {
         onProductDetailsResponse: function (res, list) {
           S({ ev: "pd", code: res.getResponseCode(), n: list ? list.size() : 0 });
           if (res.getResponseCode() !== 0 || !list || list.size() === 0) {
-            if (LIST_ONLY) S({ ev: "list_only", product: "", id: "", period: "", token: "" });
+            if (LIST_ONLY) {
+              S({ ev: "list_only", product: "", id: "", period: "", token: "" });
+            } else {
+              S({ ev: "no_trial" });
+            }
             return;
           }
           L(dexLoader);

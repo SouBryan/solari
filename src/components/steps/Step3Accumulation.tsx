@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Layers,
   Loader2,
-  Lock,
   Play,
   Square,
 } from "lucide-react";
@@ -120,8 +119,7 @@ export function Step3Accumulation({
             const isCompleted = completedSubSteps.includes(stepDef.id);
             const isRunning = activeStepId === stepDef.id;
             const isNext = nextPendingStep?.id === stepDef.id;
-            const isLocked = !isCompleted && !isNext;
-            const canStart = isNext && activeStepId === null;
+            const canStart = !isCompleted && activeStepId === null;
 
             return (
               <motion.div
@@ -137,7 +135,7 @@ export function Step3Accumulation({
                     ? "border-primary/60 bg-primary/10 shadow-sm"
                     : isNext
                     ? "border-primary/40 bg-card"
-                    : "border-border/50 bg-background/40 opacity-65"
+                    : "border-border/70 bg-card/60"
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -157,8 +155,6 @@ export function Step3Accumulation({
                       <CheckCircle2 className="h-4 w-4" />
                     ) : isRunning ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : isLocked ? (
-                      <Lock className="h-3.5 w-3.5" />
                     ) : (
                       stepDef.order
                     )}
@@ -187,7 +183,7 @@ export function Step3Accumulation({
                     </Badge>
                   ) : isRunning ? (
                     <Badge variant="default" className="px-3 py-1">
-                      Aguardando checkout...
+                      Abrindo checkout...
                     </Badge>
                   ) : (
                     <Button
@@ -196,17 +192,8 @@ export function Step3Accumulation({
                       onClick={() => onStartStep(stepDef.id)}
                       variant={isNext ? "default" : "outline"}
                     >
-                      {isLocked ? (
-                        <>
-                          <Lock className="h-3.5 w-3.5" />
-                          Bloqueado
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-3.5 w-3.5" />
-                          Executar Passo {stepDef.order}
-                        </>
-                      )}
+                      <Play className="h-3.5 w-3.5" />
+                      Executar Passo {stepDef.order}
                     </Button>
                   )}
                 </div>
