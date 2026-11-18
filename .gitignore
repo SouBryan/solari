@@ -1,0 +1,11 @@
+# Dependencies & Build
+node_modules/
+dist/
+src-tauri/target/
+
+# Runtime / Local Tools
+platform-tools/
+ultra0-report/
+*.log
+.DS_Store
+Thumbs.db
