@@ -309,17 +309,31 @@ pub async fn start_step(
             "info",
             "Extraindo purchaseToken vigente do library.db...",
         );
-        let info = sqlite_token::read_purchase_token(&adb_path, &serial, "subs_variant").await?;
-        runner::emit_log(
-            &app,
-            "ok",
-            format!(
-                "purchaseToken localizado (conta: {}, status: {}).",
-                info.account,
-                if info.is_valid { "ativo" } else { "expirado" }
-            ),
-        );
-        info.token
+        match sqlite_token::read_purchase_token(&adb_path, &serial, "subs_variant").await {
+            Ok(info) => {
+                runner::emit_log(
+                    &app,
+                    "ok",
+                    format!(
+                        "purchaseToken localizado (conta: {}, status: {}).",
+                        info.account,
+                        if info.is_valid { "ativo" } else { "expirado" }
+                    ),
+                );
+                info.token
+            }
+            Err(e) => {
+                runner::emit_log(
+                    &app,
+                    "warn",
+                    format!(
+                        "{} Usando fallback direto via BillingClient (queryPurchasesAsync)...",
+                        e
+                    ),
+                );
+                String::new()
+            }
+        }
     } else {
         String::new()
     };

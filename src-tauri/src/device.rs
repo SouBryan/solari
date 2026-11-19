@@ -116,8 +116,15 @@ pub async fn get_abi(adb_path: &str, serial: &str) -> Result<String, String> {
 
 /// Reinicia o Google One e retorna o PID ativo para injeção via `frida-inject`.
 pub async fn launch_google_one(adb_path: &str, serial: &str) -> Result<u32, String> {
-    let stop_cmd = format!("am force-stop {}", PKG_GOOGLE_ONE);
-    let _ = adb::shell(adb_path, serial, &stop_cmd).await;
+    let cleanup_cmd = format!(
+        "killall -9 frida-inject 2>/dev/null; \
+         su -c 'killall -9 frida-inject' 2>/dev/null; \
+         am force-stop {}; \
+         input keyevent 3",
+        PKG_GOOGLE_ONE
+    );
+    let _ = adb::shell(adb_path, serial, &cleanup_cmd).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
 
     let start_cmd = format!(
         "monkey -p {} -c android.intent.category.LAUNCHER 1",
@@ -134,7 +141,7 @@ pub async fn launch_google_one(adb_path: &str, serial: &str) -> Result<u32, Stri
         if let Some(first) = out.split_whitespace().next() {
             if let Ok(pid) = first.parse::<u32>() {
                 // Aguarda a Activity principal inicializar antes de anexar o frida-inject.
-                tokio::time::sleep(Duration::from_secs(3)).await;
+                tokio::time::sleep(Duration::from_secs(2)).await;
                 return Ok(pid);
             }
         }

@@ -205,6 +205,7 @@ pub fn build_task_js(
     list_only: bool,
     old_token: &str,
     stack_mode: Option<u32>,
+    stack: bool,
 ) -> Result<String, String> {
     let products_json = serde_json::to_string(&[SKU_PRO_5TB])
         .map_err(|e| format!("Erro ao serializar PRODUCTS: {}", e))?;
@@ -217,13 +218,15 @@ pub fn build_task_js(
         Some(m) => m.to_string(),
         None => "null".to_string(),
     };
+    let stack_str = if stack { "true" } else { "false" };
 
     Ok(BILLING_RUNNER_JS
         .replace("__PRODUCTS__", &products_json)
         .replace("__PREFER__", &prefer_json)
         .replace("__LIST_ONLY__", list_only_str)
         .replace("__OLD_TOKEN__", &old_token_json)
-        .replace("__STACK_MODE__", &stack_mode_str))
+        .replace("__STACK_MODE__", &stack_mode_str)
+        .replace("__STACK__", stack_str))
 }
 
 async fn kill_child(child: &mut tokio::process::Child, active_child_pid: &Arc<Mutex<Option<u32>>>) {
@@ -260,18 +263,19 @@ pub async fn run_billing_task(
     let target_pid = device::launch_google_one(adb_path, serial).await?;
     emit_log(app, "info", format!("Google One ativo (PID {}).", target_pid));
 
-    let (prefer, list_only, old_token, stack_mode, timeout_secs) = match &mode {
-        TaskMode::ListOffers => ("", true, "", None, 90u64),
+    let (prefer, list_only, old_token, stack_mode, stack, timeout_secs) = match &mode {
+        TaskMode::ListOffers => ("", true, "", None, false, 90u64),
         TaskMode::ExecuteStep { step_id, old_token } => (
             step_id.offer_id(),
             false,
             old_token.as_str(),
             if step_id.requires_token() { Some(5) } else { None },
+            step_id.requires_token(),
             45u64,
         ),
     };
 
-    let js_content = build_task_js(prefer, list_only, old_token, stack_mode)?;
+    let js_content = build_task_js(prefer, list_only, old_token, stack_mode, stack)?;
     let local_js = std::env::temp_dir().join(format!("solari_task_{}.js", std::process::id()));
     tokio::fs::write(&local_js, js_content.as_bytes())
         .await
@@ -438,9 +442,16 @@ pub async fn run_billing_task(
                                 fatal_error = Some(format!("Erro no runner Android ({}): {}", ev, detail));
                                 break;
                             }
-                            "act_thread_err" | "choose_err" | "mode_err" | "stack_param_err" | "disc" => {
+                            "act_thread_err" | "choose_err" | "mode_err" | "stack_param_err" | "stack_query_err" | "stack_outer_err" | "disc" => {
                                 let detail = val.get("m").and_then(|v| v.as_str()).unwrap_or("");
                                 emit_log(app, "warn", format!("[{}] {}", ev, detail));
+                            }
+                            "old_purchase" => {
+                                let head = val.get("head").and_then(|v| v.as_str()).unwrap_or("");
+                                emit_log(app, "ok", format!("purchaseToken obtido via BillingClient ({}...).", head));
+                            }
+                            "no_purchase" => {
+                                emit_log(app, "warn", "Nenhuma assinatura ativa retornada pelo BillingClient; abrindo oferta sem token anterior.");
                             }
                             _ => {
                                 emit_log(app, "info", format!("[{}] {}", ev, json_str));

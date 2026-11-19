@@ -17,7 +17,11 @@ pub struct TokenInfo {
 
 async fn try_read_once(adb_path: &str, serial: &str, sku_filter: &str) -> Result<Option<TokenInfo>, String> {
     let copy_cmd = format!(
-        "rm -f {tmp} && (cp {src} {tmp} || su -c 'cp {src} {tmp}') && (chmod 666 {tmp} || su -c 'chmod 666 {tmp}')",
+        "rm -f {tmp} {tmp}-wal {tmp}-shm && \
+         (cp {src} {tmp} || su -c 'cp {src} {tmp}') && \
+         (cp {src}-wal {tmp}-wal 2>/dev/null || su -c 'cp {src}-wal {tmp}-wal' 2>/dev/null || true) && \
+         (cp {src}-shm {tmp}-shm 2>/dev/null || su -c 'cp {src}-shm {tmp}-shm' 2>/dev/null || true) && \
+         (chmod 666 {tmp}* || su -c 'chmod 666 {tmp}*')",
         src = VENDING_LIBRARY_DB,
         tmp = REMOTE_TMP_DB
     );
@@ -27,18 +31,33 @@ async fn try_read_once(adb_path: &str, serial: &str, sku_filter: &str) -> Result
         "solari_lib_read_{}.db",
         std::process::id()
     ));
-    if local_db.exists() {
-        let _ = tokio::fs::remove_file(&local_db).await;
-    }
+    let local_wal: PathBuf = std::env::temp_dir().join(format!(
+        "solari_lib_read_{}.db-wal",
+        std::process::id()
+    ));
+    let local_shm: PathBuf = std::env::temp_dir().join(format!(
+        "solari_lib_read_{}.db-shm",
+        std::process::id()
+    ));
+
+    let _ = tokio::fs::remove_file(&local_db).await;
+    let _ = tokio::fs::remove_file(&local_wal).await;
+    let _ = tokio::fs::remove_file(&local_shm).await;
 
     adb::pull(adb_path, serial, REMOTE_TMP_DB, &local_db).await?;
+    let _ = adb::pull(adb_path, serial, &format!("{}-wal", REMOTE_TMP_DB), &local_wal).await;
+    let _ = adb::pull(adb_path, serial, &format!("{}-shm", REMOTE_TMP_DB), &local_shm).await;
 
     let local_clone = local_db.clone();
     let filter_pattern = format!("%{}%", sku_filter);
 
     let res = tokio::task::spawn_blocking(move || -> Result<Option<TokenInfo>, String> {
-        let conn = Connection::open_with_flags(&local_clone, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|e| format!("Falha ao abrir cópia do library.db: {}", e))?;
+        let conn = Connection::open_with_flags(
+            &local_clone,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .or_else(|_| Connection::open_with_flags(&local_clone, OpenFlags::SQLITE_OPEN_READ_ONLY))
+        .map_err(|e| format!("Falha ao abrir cópia do library.db: {}", e))?;
 
         let mut stmt = conn
             .prepare(
@@ -106,6 +125,8 @@ async fn try_read_once(adb_path: &str, serial: &str, sku_filter: &str) -> Result
     .map_err(|e| format!("Erro na tarefa de leitura SQLite: {}", e))?;
 
     let _ = tokio::fs::remove_file(&local_db).await;
+    let _ = tokio::fs::remove_file(&local_wal).await;
+    let _ = tokio::fs::remove_file(&local_shm).await;
     res
 }
 
@@ -115,7 +136,7 @@ pub async fn read_purchase_token(
     serial: &str,
     sku_filter: &str,
 ) -> Result<TokenInfo, String> {
-    const MAX_ATTEMPTS: usize = 6;
+    const MAX_ATTEMPTS: usize = 2;
     let mut last_err: Option<String> = None;
 
     for attempt in 1..=MAX_ATTEMPTS {
@@ -133,7 +154,7 @@ pub async fn read_purchase_token(
         }
 
         if attempt < MAX_ATTEMPTS {
-            tokio::time::sleep(Duration::from_millis(1500)).await;
+            tokio::time::sleep(Duration::from_millis(600)).await;
         }
     }
 

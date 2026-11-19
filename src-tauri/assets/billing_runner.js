@@ -5,6 +5,7 @@ var PREFER = __PREFER__;
 var LIST_ONLY = __LIST_ONLY__;
 var OLD_TOKEN = __OLD_TOKEN__;
 var STACK_MODE = __STACK_MODE__;
+var STACK = __STACK__;
 
 function L(v) { Java.classFactory.loader = v; }
 function S(o) { console.log("__SOLARI__" + JSON.stringify(o)); }
@@ -113,68 +114,75 @@ function query() {
       implements: [PDL],
       methods: {
         onProductDetailsResponse: function (res, list) {
-          S({ ev: "pd", code: res.getResponseCode(), n: list ? list.size() : 0 });
-          if (res.getResponseCode() !== 0 || !list || list.size() === 0) {
-            if (LIST_ONLY) {
-              S({ ev: "list_only", product: "", id: "", period: "", token: "" });
-            } else {
-              S({ ev: "no_trial" });
+          try {
+            S({ ev: "pd", code: res.getResponseCode(), n: list ? list.size() : 0 });
+            if (res.getResponseCode() !== 0 || !list || list.size() === 0) {
+              if (LIST_ONLY) {
+                S({ ev: "list_only", product: "", id: "", period: "", token: "" });
+              } else {
+                S({ ev: "no_trial" });
+              }
+              return;
             }
-            return;
-          }
-          L(dexLoader);
-          var PD = Java.use("com.android.billingclient.api.ProductDetails");
-          var SOD = Java.use("com.android.billingclient.api.ProductDetails$SubscriptionOfferDetails");
-          var PP = Java.use("com.android.billingclient.api.ProductDetails$PricingPhase");
-          var best = null;
-          for (var i = 0; i < list.size(); i++) {
-            var pd = Java.cast(list.get(i), PD);
-            var pid = String(pd.getProductId());
-            var offs = pd.getSubscriptionOfferDetails();
-            if (!offs) { S({ ev: "no_offers", product: pid }); continue; }
-            for (var j = 0; j < offs.size(); j++) {
-              var o = Java.cast(offs.get(j), SOD);
-              var oid = String(o.getOfferId());
-              var tok = String(o.getOfferToken());
-              var ph = o.getPricingPhases().getPricingPhaseList();
-              var first = Java.cast(ph.get(0), PP);
-              var micros = String(first.getPriceAmountMicros());
-              var period = String(first.getBillingPeriod());
-              S({
-                ev: "offer",
-                product: pid,
-                id: oid,
-                micros: micros,
-                period: period,
-                token: tok,
-                title: String(pd.getTitle()),
-                name: String(pd.getName())
-              });
-              if (micros !== "0") continue;
-              var rank = periodRank(period);
-              if (!best || rank > best.rank || (PREFER && oid === PREFER)) {
-                if (PREFER && oid !== PREFER) continue;
-                best = { pd: pd, offer: o, product: pid, id: oid, rank: rank, period: period, token: tok };
+            L(dexLoader);
+            var PD = Java.use("com.android.billingclient.api.ProductDetails");
+            var SOD = Java.use("com.android.billingclient.api.ProductDetails$SubscriptionOfferDetails");
+            var PP = Java.use("com.android.billingclient.api.ProductDetails$PricingPhase");
+            var best = null;
+            for (var i = 0; i < list.size(); i++) {
+              var pd = Java.cast(list.get(i), PD);
+              var pid = String(pd.getProductId());
+              var offs = pd.getSubscriptionOfferDetails();
+              if (!offs) { S({ ev: "no_offers", product: pid }); continue; }
+              for (var j = 0; j < offs.size(); j++) {
+                var o = Java.cast(offs.get(j), SOD);
+                var oid = String(o.getOfferId());
+                var tok = String(o.getOfferToken());
+                var ph = o.getPricingPhases().getPricingPhaseList();
+                var first = Java.cast(ph.get(0), PP);
+                var micros = String(first.getPriceAmountMicros());
+                var period = String(first.getBillingPeriod());
+                S({
+                  ev: "offer",
+                  product: pid,
+                  id: oid,
+                  micros: micros,
+                  period: period,
+                  token: tok,
+                  title: String(pd.getTitle()),
+                  name: String(pd.getName())
+                });
+                if (micros !== "0") continue;
+                var rank = periodRank(period);
+                if (!best || rank > best.rank || (PREFER && oid === PREFER)) {
+                  if (PREFER && oid !== PREFER) continue;
+                  best = { pd: pd, offer: o, product: pid, id: oid, rank: rank, period: period, token: tok };
+                }
               }
             }
-          }
-          if (LIST_ONLY) {
-            S({
-              ev: "list_only",
-              product: best ? best.product : "",
-              id: best ? best.id : "",
-              period: best ? best.period : "",
-              token: best ? best.token : ""
-            });
-            return;
-          }
-          if (!best) { S({ ev: "no_trial" }); return; }
-          S({ ev: "chosen", product: best.product, id: best.id, period: best.period });
-          if (OLD_TOKEN) {
-            S({ ev: "stack_start", product: best.product, id: best.id, src: "provided_token" });
-            launch(best.pd, best.offer, OLD_TOKEN);
-          } else {
-            launch(best.pd, best.offer);
+            if (LIST_ONLY) {
+              S({
+                ev: "list_only",
+                product: best ? best.product : "",
+                id: best ? best.id : "",
+                period: best ? best.period : "",
+                token: best ? best.token : ""
+              });
+              return;
+            }
+            if (!best) { S({ ev: "no_trial" }); return; }
+            S({ ev: "chosen", product: best.product, id: best.id, period: best.period });
+            if (OLD_TOKEN) {
+              S({ ev: "stack_start", product: best.product, id: best.id, src: "provided_token" });
+              launch(best.pd, best.offer, OLD_TOKEN);
+            } else if (STACK) {
+              S({ ev: "stack_start", product: best.product, id: best.id, src: "query" });
+              launchWithStack(best.pd, best.offer);
+            } else {
+              launch(best.pd, best.offer);
+            }
+          } catch (e) {
+            S({ ev: "query_err", m: String(e).slice(0, 200) });
           }
         }
       }
@@ -188,6 +196,43 @@ function query() {
     S({ ev: "query_sent" });
   } catch (e) {
     S({ ev: "query_err", m: String(e).slice(0, 200) });
+  }
+}
+
+function launchWithStack(pd, offer) {
+  try {
+    L(dexLoader);
+    var QP = Java.use("com.android.billingclient.api.QueryPurchasesParams");
+    var PRL = Java.use("com.android.billingclient.api.PurchasesResponseListener");
+    var cls = Java.registerClass({
+      name: "rc.P" + Date.now(),
+      implements: [PRL],
+      methods: {
+        onQueryPurchasesResponse: function (br, purchases) {
+          try {
+            var list = Java.cast(purchases, Java.use("java.util.List"));
+            S({ ev: "purchases", n: list.size(), code: String(br.getResponseCode()) });
+            if (list.size() === 0) {
+              S({ ev: "no_purchase" });
+              launch(pd, offer);
+              return;
+            }
+            var pu = Java.cast(list.get(0), Java.use("com.android.billingclient.api.Purchase"));
+            var tok = String(pu.getPurchaseToken());
+            S({ ev: "old_purchase", head: tok.slice(0, 16), products: String(pu.getProducts()) });
+            launch(pd, offer, tok);
+          } catch (e) {
+            S({ ev: "stack_query_err", m: String(e).slice(0, 200) });
+            launch(pd, offer);
+          }
+        }
+      }
+    });
+    var qp = QP.newBuilder().setProductType("subs").build();
+    clientRef.queryPurchasesAsync(qp, cls.$new());
+  } catch (e) {
+    S({ ev: "stack_outer_err", m: String(e).slice(0, 200) });
+    launch(pd, offer);
   }
 }
 
